@@ -190,10 +190,19 @@ int send_response(int fd, char *header, char *content_type, char *body)
   const int max_response_size = 65536;
   char response[max_response_size];
   int response_length;
+  printf("\"%s\"", body);
+  printf(">>>%c\n", body[0]);
+  int body_length = strlen(body);
 
-  // !!!!  IMPLEMENT ME
-
-  // Send it all!
+  response_length = snprintf(response, max_response_size, "%s\n"
+    "Connection: close\n"
+    "Content-Length: %d\n"
+    "Content-Type: %s\n"
+    "\n"
+    "%s",
+    header, body_length, content_type, body
+  );
+  // fflush(stdout);
   int rv = send(fd, response, response_length, 0);
 
   if (rv < 0) {
@@ -221,8 +230,11 @@ void resp_404(int fd, char *path)
  */
 void get_root(int fd)
 {
-  // !!!! IMPLEMENT ME
-  //send_response(...
+  char response_body[1024];
+
+  sprintf(response_body, "<!DOCTYPE html><html><head><title>Lambda School</title></head><body><h1>Hello World!</h1></body></html>");
+
+  send_response(fd, "HTTP/1.1 200 OK", "text/html", response_body);
 }
 
 /**
@@ -230,7 +242,14 @@ void get_root(int fd)
  */
 void get_d20(int fd)
 {
-  // !!!! IMPLEMENT ME
+  char response_body[1024];
+
+  srand(time(NULL));
+  int r = rand() % 20;
+
+  sprintf(response_body, "%02i", r);
+
+  send_response(fd, "HTTP/1.1 200 OK", "text/plain", response_body);
 }
 
 /**
@@ -238,7 +257,14 @@ void get_d20(int fd)
  */
 void get_date(int fd)
 {
-  // !!!! IMPLEMENT ME
+  char response_body[1024];
+  
+  time_t t1 = time(NULL);
+  struct tm *gtime = gmtime(&t1);
+
+  sprintf(response_body, "%s", asctime(gtime));
+
+  send_response(fd, "HTTP/1.1 200 OK", "text/plain", response_body);
 }
 
 /**
@@ -259,7 +285,53 @@ void post_save(int fd, char *body)
  */
 char *find_end_of_header(char *header)
 {
-  // !!!! IMPLEMENT ME
+  int state = 0;
+  for (char *p = header; *p != '\0'; p++) {
+    switch(state) {
+      case 0:
+        switch (*p) {
+          case '\n': state = 4; break;
+          case '\r': state = 1; break;
+        }
+        break;
+      case 1:
+        switch (*p) {
+          case '\n': state = 5; break;
+          case '\r': state = 2; break;
+          default: state = 0;
+        }
+        break;
+      case 2:
+        switch (*p) {
+          case '\r': state = 3; break;
+          default: state = 0;
+        }
+        break;
+      case 3: // fallthru
+      case 4:
+        switch (*p) {
+          case '\n': state = 5; break;
+          default: state = 0;
+        }
+        break;
+      case 5: // accept state
+        return p;
+    }
+  }
+  return NULL;
+  // char *p;
+  
+  // p = strstr(header, "\n\n");
+
+  // if (P != NULL) return p;
+  
+  // p = strstr(header, "\r\n\r\n");
+
+  // if (p != NULL) return p;
+
+  // p = strstr(header, "\r\r");
+
+  // return p;
 }
 
 /**
@@ -273,7 +345,7 @@ void handle_http_request(int fd)
   char request_type[8]; // GET or POST
   char request_path[1024]; // /info etc.
   char request_protocol[128]; // HTTP/1.1
-
+  
   // Read request
   int bytes_recvd = recv(fd, request, request_buffer_size - 1, 0);
 
@@ -281,15 +353,23 @@ void handle_http_request(int fd)
     perror("recv");
     return;
   }
-
    // NUL terminate request string
   request[bytes_recvd] = '\0';
 
-  // !!!! IMPLEMENT ME
   // Get the request type and path from the first line
-  // find_end_of_header()
+  sscanf(request, "%s %s %s", request_type, request_path, request_protocol);
+
   // call the appropriate handler functions, above, with the incoming data
+  if (strcmp(request_path, "/") == 0) {
+    get_root(fd);
+  } else if (strcmp(request_path, "/d20") == 0) {
+    get_d20(fd);
+  } else if (strcmp(request_path, "/date") == 0) {
+    get_date(fd);
+  }
+
 }
+
 
 /**
  * Main

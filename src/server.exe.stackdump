@@ -1,0 +1,9 @@
+Exception: STATUS_ACCESS_VIOLATION at eip=61138F13
+eax=FFFFFFE0 ebx=FFFFFFE0 ecx=00000000 edx=FFFFFFE0 esi=00000000 edi=FFFFFFE0
+ebp=0060C438 esp=0060C434 program=C:\users\Gary Dillard\desktop\C-Web-Server\src\server.exe, pid 1312, thread main
+cs=0023 ds=002B es=002B fs=0053 gs=002B ss=002B
+Stack trace:
+Frame     Function  Args
+0060C438  61138F13 (FFFFFFE0, 0060C4E4, 00403106, 00000001)
+0060C564  61145416 (0060C55C, 00000001, 00000000, 00000000)
+End of stack trace

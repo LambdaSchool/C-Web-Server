@@ -1,2 +1,2 @@
 server: server.c
-	gcc -Wall -Wextra -g -o $@ $^
+	gcc -std=c99 -Wall -Wextra -g -o $@ $^
