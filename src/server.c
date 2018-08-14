@@ -191,7 +191,15 @@ int send_response(int fd, char *header, char *content_type, char *body)
   char response[max_response_size];
   int response_length; // Total length of header plus body
 
-  // !!!!  IMPLEMENT ME
+    // !!!!  IMPLEMENT ME
+  // found this on stack overflow https://stackoverflow.com/questions/1442116/how-to-get-the-date-and-time-values-in-a-c-program
+  time_t t = time(NULL);
+  struct tm *tm = localtime(&t);
+  int body_length = strlen(body);
+
+  response_length = sprintf(response, "%s\n""Date: %s""Connection: close\n""Content-Length: %d\n""Content-Type: %s\n""\n""%s", 
+    header, asctime(tm), body_length, content_type, body );
+  
 
   // Send it all!
   int rv = send(fd, response, response_length, 0);
@@ -219,6 +227,8 @@ void get_root(int fd)
 {
   // !!!! IMPLEMENT ME
   //send_response(...
+  // printf("you found get_root\n");
+  send_response(fd, "HTTP/1.1 200 OK", "text/html", "<h1>Hello, world!</h1>");
 }
 
 /**
@@ -227,6 +237,12 @@ void get_root(int fd)
 void get_d20(int fd)
 {
   // !!!! IMPLEMENT ME
+  // printf("you found get_d20\n");
+  srand(time(0));
+  char rando_num[25];
+  sprintf(rando_num, "<body><h1>%d</h1></body>", (rand()% 20));
+
+  send_response(fd, "HTTP/1.1 200 OK", "text/html", rando_num);
 }
 
 /**
@@ -235,6 +251,15 @@ void get_d20(int fd)
 void get_date(int fd)
 {
   // !!!! IMPLEMENT ME
+  // printf("you found get_date\n");
+
+  time_t t = time(NULL);
+  struct tm *tm = gmtime(&t);
+  char date_time[200];
+  // sprintf(date_time, "<h1>%s</h1>", asctime(tm));
+  // !!!!! BUG FOUND zeros are just do not show up. so if the time is 18:02, you will only see 18:2
+  sprintf(date_time, "<h1>Date and Time: %d-%d-%d %d:%d</h1>", tm->tm_mon + 1, tm->tm_mday, tm->tm_year - 100, tm->tm_hour, tm->tm_min);
+  send_response(fd, "HTTP/1.1 200 OK", "text/html", date_time);
 }
 
 /**
@@ -245,6 +270,22 @@ void post_save(int fd, char *body)
   // !!!! IMPLEMENT ME
 
   // Save the body and send a response
+  char *status;
+  char response_body[128];
+  int file_d = open("data.txt", O_CREAT|O_WRONLY, 0644);
+
+  if(file_d < 0)
+  {
+    status = "failed";
+  }else
+  {
+    write(file_d, body, strlen(body));
+    close(file_d);
+    status = "ok";
+  }
+  
+  sprintf(response_body, "{\"status\": \"%s\"}\n",status);
+  send_response(fd, "HTTP/1.1 200 OK", "application/json", response_body);
 }
 
 /**
@@ -259,6 +300,13 @@ void post_save(int fd, char *body)
 char *find_start_of_body(char *header)
 {
   // !!!! IMPLEMENT ME
+  // printf("inside find_start:\n%s\n", header);
+  char *body_start;
+  body_start = strstr(header, "\r\n\r\n");
+  printf("%s\n", body_start + 3);
+
+
+  return body_start + 2;
 }
 
 /**
@@ -268,18 +316,21 @@ void handle_http_request(int fd)
 {
   const int request_buffer_size = 65536; // 64K
   char request[request_buffer_size];
-  char *p;
+  // char *p;
   char request_type[8]; // GET or POST
   char request_path[1024]; // /info etc.
   char request_protocol[128]; // HTTP/1.1
 
+  
   // Read request
   int bytes_recvd = recv(fd, request, request_buffer_size - 1, 0);
 
+  // printf("%s \n", request);
   if (bytes_recvd < 0) {
     perror("recv");
     return;
   }
+  // printf("%s \n", request);
 
    // NUL terminate request string
   request[bytes_recvd] = '\0';
@@ -287,12 +338,43 @@ void handle_http_request(int fd)
   // !!!! IMPLEMENT ME
   // Get the request type and path from the first line
   // Hint: sscanf()!
+  // sscanf = first is were the data is coming from, next is the data types you will be taking in, last is the the vars theyt will be put in
+  sscanf(request, "%s %s %s", request_type, request_path, request_protocol);
+
+  // printf("REQUEST: %s %s %s", request_type, request_path, request_protocol);
+  // this is printing 2 times, first is blank, second had data
+  // printf("request_type = %s, request_path = %s, request_protocol = %s\n", request_type, request_path, request_protocol);
 
   // !!!! IMPLEMENT ME (stretch goal)
-  // find_start_of_body()
+  // find_start_of_body(request);
 
   // !!!! IMPLEMENT ME
   // call the appropriate handler functions, above, with the incoming data
+  // strcmp compares 2 strings and returns 0 if they match.
+  if (strcmp(request_type, "GET") == 0)
+  {
+    if(strcmp(request_path, "/") == 0)
+    {
+      get_root(fd);
+    }
+    else if(strcmp(request_path, "/d20") == 0)
+    {
+      get_d20(fd);
+    }
+    else if(strcmp(request_path, "/date") == 0)
+    {
+      get_date(fd);
+    }
+    else
+    {
+      resp_404(fd);
+    }
+  }
+  else if(strcmp(request_type, "POST") == 0)
+  {
+    char *body = find_start_of_body(request);
+    post_save(fd, body);
+  }
 }
 
 /**
