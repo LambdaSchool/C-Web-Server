@@ -15,12 +15,115 @@ What you need to write:
 
 What's already here:
 
+
+
 * `net.h` and `net.c` contain low-level networking code
+- `BACKLOG` defines how many pending connections queue will hold
+- `void *get_in_addr(struct sockaddr *sa)` gets an internet address, IPv4 or IPv6
+- `int get_listener_socket(char *port)` returns the main listening socket, returns -1 or error
+1) Looks at local network interfaces and gather list of potential interfaces
+2) Loop through list and try to set up a socket on each, break if we have success
+3) Error handler for if we have a bad socket
+4) Sets up a listener for remote computers to connect to this socket/IP
+
+
+
 * `mime.h` and `mime.c` contains functionality for determining the MIME type of a file
+- `char *strlower(char *s)` lower cases a string
+- `char *mime_type_get(char *filename)` return a MIME type for a given filename
+
+
+
 * `file.h` and `file.c` contains handy file-reading code that you may want to utilize, namely the `file_load()` and `file_free()` functions for reading file data and deallocating file data, respectively (or you could just perform these operations manually as well)
+- `struct file_data *file_load(char *filename)` loads a file into memory and returns a pointer to the data
+1) Gets file size
+2) Make sure it's a regular file
+3) open the file for reading
+4) Allocate that many bytes
+5) Read in the entire file
+6) Allocate the file data struct
+- `void file_free(struct file_data *filedata)` frees memory allocated by file_load()
+
+
+
 * `hashtable.h` and `hashtable.c` contain an implementation of a hashtable (this one is a bit more complicated than what you built in the Hashtables sprint)
+- Create a hash table of 128 elements and use the default hash function
+- `hashtable_put(ht, "some data", &data1);` stores pointers to data in the hash table
+- data can be pointers to any type of data
+- you can also store a struct
+- `hashtable_get(ht, "other data");` retrieves data
+- Hash table entry:
+```
+struct htent {
+    void *key;
+    int key_size;
+    int hashed_key;
+    void *data;
+};
+```
+- `void add_entry_count(struct hashtable *ht, int d)` change the entry count, maintain load metrics
+- `int default_hashf(void *data, int data_size, int bucket_count)` is default modulo hashing function
+- `struct hashtable *hashtable_create(int size, int (*hashf)(void *, int, int))` creates a new hashtable
+- `void htent_free(void *htent, void *arg)` frees an htent (struct)
+- `void hashtable_destroy(struct hashtable *ht)` destroys a hashtable, does NOT free the data pointer
+- `int htcmp(void *a, void *b)` is comparison function for hashtable entries
+
+- `void *hashtable_put(struct hashtable *ht, char *key, void *data)` puts to hash table with a string key
+- `void *hashtable_get(struct hashtable *ht, char *key)` gets from the hash table a string key
+- `void *hashtable_delete(struct hashtable *ht, char *key)` delete from the hashtable by string key
+
+- `void *hashtable_put_bin(struct hashtable *ht, void *key, int key_size, void *data)` puts to hash table with a binary key
+- `void *hashtable_get_bin(struct hashtable *ht, void *key, int key_size)` gets from the hash table a binary key
+- `void *hashtable_delete_bin(struct hashtable *ht, void *key, int key_size)` delete from the hashtable by binary key
+
+- `void hashtable_foreach(struct hashtable *ht, void (*f)(void *, void *), void *arg)` for each element in hashtable
+- elements are returned in effectively random order
+- `void foreach_callback(void *vent, void *vpayload)` forEach callback function
+
+
+
 * `llist.h` and `llist.c` contain an implementation of a doubly-linked list (used solely by the hashable--you don't need it)
+- `struct llist *llist_create(void)` allocates a new linked list
+- `void llist_destroy(struct llist *llist)` destroys a linked list, does not deallocate the data in each node
+
+- `int llist_count(struct llist *llist)` return the number of elements in the list
+- `void llist_foreach(struct llist *llist, void (*f)(void *, void *), void *arg)` for each item in the list run a function
+
+- `void *llist_insert(struct llist *llist, void *data)` insert at the head of a linked list
+- `void *llist_append(struct llist *llist, void *data)` appends to the end of a list
+- cmpfn should return 0 if the comparison to this node's data is equal
+- `void *llist_delete(struct llist *llist, void *data, int (*cmpfn)(void *, void *))` delete an element in the list
+
+- `void *llist_find(struct llist *llist, void *data, int (*cmpfn)(void *, void *))` find an element in the list
+- `void *llist_head(struct llist *llist)` returns the first element in a list
+- `void *llist_tail(struct llist *llist)` returns the last element in a list
+- cmpfn should return 0 if the comparison to this node's data is equal
+- does *not* free the data--it merely returns a pointer to it
+
+- `void **llist_array_get(struct llist *llist)` allocates and returns a new NULL-terminated array of pointers to data elements in the list.
+- `void llist_array_free(void **a)` Free an array allocated with llist_array_get()
+- this does not modify the linked list or its data in any way
+
+
+
 * `cache.h` and `cache.c` are where you will implement the LRU cache functionality for days 3 and 4
+- `struct cache_entry *alloc_entry(char *path, char *content_type, void *content, int content_length)` allocates a cache entry
+- `void free_entry(struct cache_entry *entry)` deallocates a cache entry
+
+- `void dllist_insert_head(struct cache *cache, struct cache_entry *ce)` insert a cache entry at the head of the linked list
+- `void dllist_move_to_head(struct cache *cache, struct cache_entry *ce)` moves a cache entry to the head of the list
+- `struct cache_entry *dllist_remove_tail(struct cache *cache)` removes the tail from the list and returns it
+- does not deallocate the tail
+
+- `struct cache *cache_create(int max_size, int hashsize)` create a new cache
+- max_size: maximum number of entries in the cache
+- hashsize: hashtable size (0 for default)
+- `void cache_free(struct cache *cache)`
+
+- `void cache_put(struct cache *cache, char *path, char *content_type, void *content, int content_length)` stores an entry in the cache
+- `struct cache_entry *cache_get(struct cache *cache, char *path)` retrieves an entry in the cache
+
+
 
 ## What is a Web Server?
 
@@ -247,4 +350,3 @@ When a new connection comes in, launch a thread to handle it.
 Be sure to lock the cache when a thread accesses it so the threads don't step on each other's toes and corrupt the cache.
 
 Also have thread cleanup handlers to handle threads that have died.
-

@@ -50,17 +50,42 @@
  */
 int send_response(int fd, char *header, char *content_type, void *body, int content_length)
 {
-    const int max_response_size = 262144;
-    char response[max_response_size];
+    const int max_response_size = 256000; // Previously: 65536
+    char response[max_response_size]; // char buffer
+    int response_length = 0; // length of header, the total number of bytes returned from sprintf()
+    time_t rawtime;
+    struct tm * timeinfo;
+
+    time(&rawtime);
+    timeinfo = localtime(&rawtime);
 
     // Build HTTP response and store it in response
+    // sprintf stands for “String print”. Instead of printing on console, it store output on char buffer which is specified in sprintf
+    response_length= sprintf(response,
+      "%s\n"
+      "Date: %s"
+      "Connection: %s\n"
+      "Content-Length: %d\n"
+      "Content-Type: %s\n\n",  // The end of the header on both the request and response is marked by a blank line i.e. two newlines in a row)
 
-    ///////////////////
-    // IMPLEMENT ME! //
-    ///////////////////
+      header,
+      asctime(timeinfo),
+      "close",
+      content_length,
+      content_type
+    );
 
+    // The total length of the header and body should be stored in the response_length variable
+    // so that the send() call knows how many bytes to send out over the wire.
     // Send it all!
-    int rv = send(fd, response, response_length, 0);
+
+    // ATTEMPT 2: Working
+    memcpy(response+response_length, body, content_length); // start copying after the length of the header
+    int rv = send(fd, response, response_length+content_length, 0);
+
+    // ATTEMPT 1: Error -> GET http://localhost:3490/cat.jpg net::ERR_CONTENT_LENGTH_MISMATCH 200 (OK)
+    // response_length += strlen(body);
+    // int rv = send(fd, response, response_length, 0);
 
     if (rv < 0) {
         perror("send");
@@ -76,16 +101,15 @@ int send_response(int fd, char *header, char *content_type, void *body, int cont
 void get_d20(int fd)
 {
     // Generate a random number between 1 and 20 inclusive
-    
-    ///////////////////
-    // IMPLEMENT ME! //
-    ///////////////////
+    srand(time(NULL)); // Seeds the pseudo-random number generator used by rand() with the value seed.
+    char body[20]; // stores total number of bytes from sprintf
+    int random_number = rand()%20 + 1; // +1 for inclusive 20
+    int length = sprintf(body, "%d", random_number);
+    printf("Random Number: %d, Length: %d\n", random_number, length);
 
     // Use send_response() to send it back as text/plain data
-
-    ///////////////////
-    // IMPLEMENT ME! //
-    ///////////////////
+    // send_response(int fd, char *header, char *content_type, void *body, int content_length)
+    send_response(fd, "HTTP/1.1 200 OK", "text/plain", body, length);
 }
 
 /**
@@ -119,9 +143,24 @@ void resp_404(int fd)
  */
 void get_file(int fd, struct cache *cache, char *request_path)
 {
-    ///////////////////
-    // IMPLEMENT ME! //
-    ///////////////////
+  char path[1024];
+  struct file_data *filedata; // buffer, type from file.c
+  char *mime_type; // type from from mime.c
+
+  sprintf(path, "%s%s", SERVER_ROOT, request_path); // parse the file path
+
+  filedata = file_load(path); // load the file into struct buffer
+  if (filedata == NULL) { // check if file was loaded properly
+      resp_404(fd);
+      printf("get_file() -> Cannot find file.\n");
+      return;
+  }
+
+  mime_type = mime_type_get(path);
+
+  printf("get_file() -> %d, %s, %s, %s,%d", fd, "HTTP/1.1 200 OK", mime_type, filedata->data, filedata->size);
+  send_response(fd, "HTTP/1.1 200 OK", mime_type, filedata->data, filedata->size); // send the buffer
+  file_free(filedata); // file_load had built in malloc
 }
 
 /**
@@ -132,9 +171,11 @@ void get_file(int fd, struct cache *cache, char *request_path)
  */
 char *find_start_of_body(char *header)
 {
+  (void)header;
     ///////////////////
     // IMPLEMENT ME! // (Stretch)
     ///////////////////
+    return 0;
 }
 
 /**
@@ -144,6 +185,7 @@ void handle_http_request(int fd, struct cache *cache)
 {
     const int request_buffer_size = 65536; // 64K
     char request[request_buffer_size];
+    char method[10], path[20], protocol[20];
 
     // Read request
     int bytes_recvd = recv(fd, request, request_buffer_size - 1, 0);
@@ -153,18 +195,38 @@ void handle_http_request(int fd, struct cache *cache)
         return;
     }
 
-
-    ///////////////////
-    // IMPLEMENT ME! //
-    ///////////////////
-
     // Read the three components of the first request line
+    // The variable request in handle_http_request() holds the entire HTTP request once the recv() call returns.
+    printf("request: %s\n", request);
+    sscanf(request, "%s %s %s", method, path, protocol);
+    printf("handle_http_request() -> \n"
+      "method: %s,\n"
+      "path: %s,\n"
+      "protocol: %s\n",
+      
+      method,
+      path,
+      protocol
+    );
 
     // If GET, handle the get endpoints
-
-    //    Check if it's /d20 and handle that special case
-    //    Otherwise serve the requested file by calling get_file()
-
+    // Check if it's /d20 and handle that special case
+    // Otherwise serve the requested file by calling get_file()
+    // Hint: strcmp() for matching the request method and path. Another hint: strcmp() returns 0 if the strings are the same!
+    if (strcmp(method, "GET") == 0) {
+      if (strcmp(path, "/d20") == 0) {
+        get_d20(fd);
+      }
+      else if (strcmp(path, "/") == 0) {
+        get_file(fd, cache, "/index.html");
+      }
+      else {
+        get_file(fd, cache, path);
+      }
+    }
+    else {
+      resp_404(fd);
+    }
 
     // (Stretch) If POST, handle the post request
 }
