@@ -52,16 +52,17 @@ int send_response(int fd, char *header, char *content_type, void *body, int cont
 {
     const int max_response_size = 262144;
     char response[max_response_size];
+    int response_length;
+    time_t t = time(NULL);
+    struct tm *local_time = localtime(&t);
+    char *timestamp = asctime(local_time);
 
-    // Build HTTP response and store it in response
-
-    ///////////////////
-    // IMPLEMENT ME! //
-    ///////////////////
+    response_length = sprintf(response, "%s\nDate %s Connection: close\nContent-Type: %s\nContent-Length: %d\n\n", header, timestamp, content_type, content_length);
+    memcpy(response + response_length, body, content_length);
+    response_length += content_length;
 
     // Send it all!
     int rv = send(fd, response, response_length, 0);
-
     if (rv < 0) {
         perror("send");
     }
@@ -75,17 +76,14 @@ int send_response(int fd, char *header, char *content_type, void *body, int cont
  */
 void get_d20(int fd)
 {
-    // Generate a random number between 1 and 20 inclusive
+    int random_number = rand() % 20 + 1;
+
+    char number_string[255];
+    int string_length;
+
+    string_length = sprintf(number_string, "%d", random_number);
     
-    ///////////////////
-    // IMPLEMENT ME! //
-    ///////////////////
-
-    // Use send_response() to send it back as text/plain data
-
-    ///////////////////
-    // IMPLEMENT ME! //
-    ///////////////////
+    send_response(fd, "HTTP/1.1 200 OK", "text/plain", number_string, string_length);
 }
 
 /**
@@ -108,9 +106,7 @@ void resp_404(int fd)
     }
 
     mime_type = mime_type_get(filepath);
-
     send_response(fd, "HTTP/1.1 404 NOT FOUND", mime_type, filedata->data, filedata->size);
-
     file_free(filedata);
 }
 
@@ -119,9 +115,28 @@ void resp_404(int fd)
  */
 void get_file(int fd, struct cache *cache, char *request_path)
 {
-    ///////////////////
-    // IMPLEMENT ME! //
-    ///////////////////
+    char filepath[4096];
+    struct file_data *filedata; 
+    char *mime_type;
+
+    if (strcmp(request_path, "/") == 0) {
+        snprintf(filepath, sizeof filepath, "%s/index.html", SERVER_ROOT);
+    } else {
+        snprintf(filepath, sizeof filepath, "%s%s", SERVER_ROOT, request_path);
+    }
+
+    filedata = file_load(filepath);
+
+    if (filedata == NULL) {
+        resp_404(fd);
+        return;
+    } else {
+        mime_type = mime_type_get(filepath);
+        cache_put(cache, filepath, mime_type, filedata->data, filedata->size);
+        send_response(fd, "HTTP/1.1 200 OK", mime_type, filedata->data, filedata->size);
+    }
+
+    file_free(filedata);
 }
 
 /**
@@ -132,9 +147,11 @@ void get_file(int fd, struct cache *cache, char *request_path)
  */
 char *find_start_of_body(char *header)
 {
+    (void)header;
     ///////////////////
     // IMPLEMENT ME! // (Stretch)
     ///////////////////
+    return NULL;
 }
 
 /**
@@ -153,27 +170,40 @@ void handle_http_request(int fd, struct cache *cache)
         return;
     }
 
+    char method[200], path[8192];
 
-    ///////////////////
-    // IMPLEMENT ME! //
-    ///////////////////
+    sscanf(request, "%s %s", method, path);
 
-    // Read the first two components of the first line of the request 
- 
-    // If GET, handle the get endpoints
+    struct cache_entry *entry = cache_get(cache, path);
 
-    //    Check if it's /d20 and handle that special case
-    //    Otherwise serve the requested file by calling get_file()
+    if (entry != NULL) {
+        send_response(fd, "HTTP/1.1 200 OK", entry->content_type, entry->content, entry->content_length);
+    } else {
 
+        if (strcmp("/d20", path) == 0) {
+            get_d20(fd);
+        
+        } else if (strcmp("GET", method) == 0) {
+            get_file(fd, cache, path);
 
-    // (Stretch) If POST, handle the post request
+        } else if (strcmp("POST", method) == 0) {
+
+            // (Stretch) If POST, handle the post request
+
+        } else {
+            resp_404(fd);
+            return;
+        }
+    }
+
+    free(entry);
 }
 
 /**
  * Main
  */
 int main(void)
-{
+{   
     int newfd;  // listen on sock_fd, new connection on newfd
     struct sockaddr_storage their_addr; // connector's address information
     char s[INET6_ADDRSTRLEN];
@@ -200,6 +230,7 @@ int main(void)
         // Parent process will block on the accept() call until someone
         // makes a new connection:
         newfd = accept(listenfd, (struct sockaddr *)&their_addr, &sin_size);
+        
         if (newfd == -1) {
             perror("accept");
             continue;
